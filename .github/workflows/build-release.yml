@@ -1,0 +1,92 @@
+name: Build & Release - Signed APK & AAB
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Setup Java JDK 17 (Zulu)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+      
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps
+      
+      - name: Build web assets
+        run: npm run build
+      
+      - name: Sync Capacitor to Android
+        run: npx cap sync android
+      
+      - name: Generate Release Keystore
+        run: |
+          keytool -genkeypair -v -storetype PKCS12 \
+            -keystore android/app/auto-release.keystore \
+            -alias autoparts \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -storepass "AutoParts2026Secret" \
+            -keypass "AutoParts2026Secret" \
+            -dname "CN=AutoParts, OU=Dev, O=AutoParts, L=India, ST=TN, C=IN"
+      
+      - name: Build Release APK and AAB
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleRelease bundleRelease \
+            -Pandroid.injected.signing.store.file=app/auto-release.keystore \
+            -Pandroid.injected.signing.store.password="AutoParts2026Secret" \
+            -Pandroid.injected.signing.key.alias=autoparts \
+            -Pandroid.injected.signing.key.password="AutoParts2026Secret"
+      
+      - name: Verify APK and AAB files
+        run: |
+          echo "Checking for built artifacts..."
+          ls -la android/app/build/outputs/apk/release/ || echo "APK directory not found"
+          ls -la android/app/build/outputs/bundle/release/ || echo "AAB directory not found"
+      
+      - name: Upload Signed APK
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Signed-App-Release-APK
+          path: android/app/build/outputs/apk/release/app-release.apk
+          retention-days: 30
+      
+      - name: Upload Signed AAB
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Signed-App-Release-AAB
+          path: android/app/build/outputs/bundle/release/app-release.aab
+          retention-days: 30
+      
+      - name: Build Summary
+        if: always()
+        run: |
+          echo "=== Build Artifacts Generated ==="
+          echo "APK Location: android/app/build/outputs/apk/release/app-release.apk"
+          echo "AAB Location: android/app/build/outputs/bundle/release/app-release.aab"
+          echo "Keystore: android/app/auto-release.keystore"
+          echo "Alias: autoparts"
+          echo ""
+          echo "Artifacts are available for download in the workflow run."

@@ -1,0 +1,30 @@
+
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Solid Dark Navy Background -->
+  <rect width="1024" height="1024" fill="#0B1220"/>
+  
+  <!-- Subtle Radial Gradient Glow -->
+  <circle cx="512" cy="512" r="420" fill="url(#bg_glow)" opacity="0.18"/>
+  
+  <!-- Central Emblem Symbol -->
+  <g transform="translate(0, -10)">
+    <!-- Primary Outer Apex Chevron - Primary Blue #1565FF -->
+    <path d="M 512 180 L 800 564 L 700 564 L 512 312 L 324 564 L 224 564 Z" fill="#1565FF"/>
+    
+    <!-- Secondary Inner Dynamic Chevron - Pure White #FFFFFF -->
+    <path d="M 512 340 L 712 612 L 620 612 L 512 464 L 404 612 L 312 612 Z" fill="#FFFFFF"/>
+    
+    <!-- Core Apex Notch - Primary Blue #1565FF -->
+    <path d="M 512 492 L 624 652 L 548 652 L 512 600 L 476 652 L 400 652 Z" fill="#1565FF"/>
+    
+    <!-- Precision Anchor Diamond - Pure White #FFFFFF -->
+    <path d="M 512 680 L 560 744 L 512 808 L 464 744 Z" fill="#FFFFFF"/>
+  </g>
+  
+  <defs>
+    <radialGradient id="bg_glow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(512 512) rotate(90) scale(420)">
+      <stop stop-color="#1565FF"/>
+      <stop offset="1" stop-color="#1565FF" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+</svg>
