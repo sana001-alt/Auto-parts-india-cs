@@ -76,56 +76,34 @@ jobs:
             -Pandroid.injected.signing.key.alias=autoparts \
             -Pandroid.injected.signing.key.password="$RELEASE_KEYSTORE_PASSWORD"
 
-      - name: Sign APK explicitly with apksigner
-        run: |
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign \
-            --ks android/app/auto-release.keystore \
-            --ks-key-alias autoparts \
-            --ks-pass pass:"$RELEASE_KEYSTORE_PASSWORD" \
-            --key-pass pass:"$RELEASE_KEYSTORE_PASSWORD" \
-            --out android/app/build/outputs/apk/release/app-release-signed.apk \
-            android/app/build/outputs/apk/release/app-release.apk
-
-      - name: Sign AAB explicitly with jarsigner
-        run: |
-          cp android/app/build/outputs/bundle/release/app-release.aab android/app/build/outputs/bundle/release/app-release-signed.aab
-          jarsigner -keystore android/app/auto-release.keystore \
-            -storepass "$RELEASE_KEYSTORE_PASSWORD" \
-            -keypass "$RELEASE_KEYSTORE_PASSWORD" \
-            -sigalg SHA256withRSA \
-            -digestalg SHA-256 \
-            -signedjar android/app/build/outputs/bundle/release/app-release-signed.aab \
-            android/app/build/outputs/bundle/release/app-release.aab \
-            autoparts
-
       - name: Verify APK and AAB files
         run: |
           echo "Checking for built artifacts..."
           ls -l android/app/build/outputs/apk/release/
           ls -l android/app/build/outputs/bundle/release/
-          file android/app/build/outputs/apk/release/app-release-signed.apk
-          file android/app/build/outputs/bundle/release/app-release-signed.aab
+          file android/app/build/outputs/apk/release/app-release.apk
+          file android/app/build/outputs/bundle/release/app-release.aab
 
       - name: Upload Signed APK
         uses: actions/upload-artifact@v4
         with:
           name: Signed-App-Release-APK
-          path: android/app/build/outputs/apk/release/app-release-signed.apk
+          path: android/app/build/outputs/apk/release/app-release.apk
           retention-days: 30
 
       - name: Upload Signed AAB
         uses: actions/upload-artifact@v4
         with:
           name: Signed-App-Release-AAB
-          path: android/app/build/outputs/bundle/release/app-release-signed.aab
+          path: android/app/build/outputs/bundle/release/app-release.aab
           retention-days: 30
 
       - name: Build Summary
         if: always()
         run: |
           echo "=== Build Artifacts Generated ==="
-          echo "APK Location: android/app/build/outputs/apk/release/app-release-signed.apk"
-          echo "AAB Location: android/app/build/outputs/bundle/release/app-release-signed.aab"
+          echo "APK Location: android/app/build/outputs/apk/release/app-release.apk"
+          echo "AAB Location: android/app/build/outputs/bundle/release/app-release.aab"
           echo "Keystore: android/app/auto-release.keystore"
           echo "Alias: autoparts"
           echo ""
