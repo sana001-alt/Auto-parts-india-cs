@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 import { KeyboardResize, KeyboardStyle } from '@capacitor/keyboard';
 
 const config: CapacitorConfig = {
-  appId: 'com.autopartsindia.app',
+  appId: 'com.autoparts.india',
   appName: 'Auto Parts India',
   webDir: 'dist',
   ios: {
