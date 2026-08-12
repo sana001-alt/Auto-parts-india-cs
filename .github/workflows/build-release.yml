@@ -7,104 +7,155 @@ on:
       - master
   workflow_dispatch:
 
-env:
-  NODE_VERSION: '22'
-  JAVA_VERSION: '17'
-  RELEASE_KEYSTORE_ALIAS: 'autoparts'
-  RELEASE_KEYSTORE_PATH: 'android/app/auto-release.keystore'
-
 jobs:
   build-release:
     runs-on: ubuntu-latest
-
+    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Setup Node.js
+      
+      - name: Setup Node.js 20
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version: '20'
           cache: 'npm'
-
-      - name: Setup Java JDK 17 (Zulu)
+      
+      - name: Setup Java JDK 21 (Zulu)
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
-          java-version: ${{ env.JAVA_VERSION }}
-
+          java-version: '21'
+      
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
-
+        with:
+          api-level: 34
+          build-tools-version: '34.0.0'
+          cmake-version: '3.22.1'
+      
       - name: Accept Android SDK licenses
-        run: yes | sdkmanager --licenses
-
-      - name: Install Android build tools and platforms
         run: |
-          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
-
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+      
       - name: Install dependencies
         run: npm install --legacy-peer-deps
-
+      
       - name: Build web assets
         run: npm run build
-
+      
       - name: Sync Capacitor to Android
         run: npx cap sync android
-
+      
+      - name: Create local.properties
+        run: |
+          cd android
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+          echo "cmake.dir=$ANDROID_HOME/cmake" >> local.properties
+          cat local.properties
+      
       - name: Generate Release Keystore
         run: |
-          export RELEASE_KEYSTORE_PASSWORD="$(openssl rand -hex 16)"
-          echo "RELEASE_KEYSTORE_PASSWORD=$RELEASE_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+          mkdir -p android/app
           keytool -genkeypair -v -storetype PKCS12 \
-            -keystore "$RELEASE_KEYSTORE_PATH" \
-            -alias "$RELEASE_KEYSTORE_ALIAS" \
+            -keystore android/app/auto-release.keystore \
+            -alias autoparts \
             -keyalg RSA \
             -keysize 2048 \
             -validity 10000 \
-            -storepass "$RELEASE_KEYSTORE_PASSWORD" \
-            -keypass "$RELEASE_KEYSTORE_PASSWORD" \
+            -storepass "AutoParts2026Secret" \
+            -keypass "AutoParts2026Secret" \
             -dname "CN=AutoParts, OU=Dev, O=AutoParts, L=India, ST=TN, C=IN"
-
-      - name: Build Release APK and AAB
+          ls -lh android/app/auto-release.keystore
+      
+      - name: Build Release APK
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleRelease bundleRelease --no-daemon \
+          ./gradlew assembleRelease \
             -Pandroid.injected.signing.store.file=app/auto-release.keystore \
-            -Pandroid.injected.signing.store.password="$RELEASE_KEYSTORE_PASSWORD" \
+            -Pandroid.injected.signing.store.password="AutoParts2026Secret" \
             -Pandroid.injected.signing.key.alias=autoparts \
-            -Pandroid.injected.signing.key.password="$RELEASE_KEYSTORE_PASSWORD"
-
-      - name: Verify APK and AAB files
+            -Pandroid.injected.signing.key.password="AutoParts2026Secret" \
+            -x lint \
+            --info 2>&1 | tee build-apk.log
+      
+      - name: Verify Release APK
         run: |
-          echo "Checking for built artifacts..."
-          ls -l android/app/build/outputs/apk/release/
-          ls -l android/app/build/outputs/bundle/release/
-          file android/app/build/outputs/apk/release/app-release.apk
-          file android/app/build/outputs/bundle/release/app-release.aab
-
+          echo "=== Checking for Release APK ==="
+          if [ -f android/app/build/outputs/apk/release/app-release.apk ]; then
+            echo "✅ APK found!"
+            ls -lh android/app/build/outputs/apk/release/app-release.apk
+            file android/app/build/outputs/apk/release/app-release.apk
+          else
+            echo "❌ APK not found!"
+            echo "Available files in release output:"
+            find android/app/build/outputs -type f -name "*.apk" 2>/dev/null || echo "No APK files found"
+            exit 1
+          fi
+      
+      - name: Build Release AAB
+        run: |
+          cd android
+          ./gradlew bundleRelease \
+            -Pandroid.injected.signing.store.file=app/auto-release.keystore \
+            -Pandroid.injected.signing.store.password="AutoParts2026Secret" \
+            -Pandroid.injected.signing.key.alias=autoparts \
+            -Pandroid.injected.signing.key.password="AutoParts2026Secret" \
+            -x lint \
+            --info 2>&1 | tee build-aab.log
+      
+      - name: Verify Release AAB
+        run: |
+          echo "=== Checking for Release AAB ==="
+          if [ -f android/app/build/outputs/bundle/release/app-release.aab ]; then
+            echo "✅ AAB found!"
+            ls -lh android/app/build/outputs/bundle/release/app-release.aab
+            file android/app/build/outputs/bundle/release/app-release.aab
+          else
+            echo "❌ AAB not found!"
+            echo "Available files in bundle output:"
+            find android/app/build/outputs -type f -name "*.aab" 2>/dev/null || echo "No AAB files found"
+            exit 1
+          fi
+      
       - name: Upload Signed APK
         uses: actions/upload-artifact@v4
         with:
           name: Signed-App-Release-APK
           path: android/app/build/outputs/apk/release/app-release.apk
           retention-days: 30
-
+      
       - name: Upload Signed AAB
         uses: actions/upload-artifact@v4
         with:
           name: Signed-App-Release-AAB
           path: android/app/build/outputs/bundle/release/app-release.aab
           retention-days: 30
-
+      
       - name: Build Summary
-        if: always()
+        if: success()
         run: |
-          echo "=== Build Artifacts Generated ==="
-          echo "APK Location: android/app/build/outputs/apk/release/app-release.apk"
-          echo "AAB Location: android/app/build/outputs/bundle/release/app-release.aab"
-          echo "Keystore: android/app/auto-release.keystore"
-          echo "Alias: autoparts"
+          echo "✅ ==================================="
+          echo "✅ BUILD SUCCESSFUL!"
+          echo "✅ ==================================="
           echo ""
-          echo "Artifacts are available for download in the workflow run."
+          echo "📦 Generated Artifacts:"
+          echo "  - Signed Release APK: android/app/build/outputs/apk/release/app-release.apk"
+          echo "  - Signed Release AAB: android/app/build/outputs/bundle/release/app-release.aab"
+          echo ""
+          echo "📋 Artifact Details:"
+          file android/app/build/outputs/apk/release/app-release.apk || true
+          file android/app/build/outputs/bundle/release/app-release.aab || true
+          echo ""
+          echo "💾 Download from: GitHub Actions Artifacts"
+      
+      - name: Upload Build Logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Build-Logs
+          path: |
+            android/build-apk.log
+            android/build-aab.log
+          retention-days: 7
