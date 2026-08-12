@@ -1,0 +1,42 @@
+import type { CapacitorConfig } from '@capacitor/cli';
+import { KeyboardResize, KeyboardStyle } from '@capacitor/keyboard';
+
+const config: CapacitorConfig = {
+  appId: 'com.autopartsindia.app',
+  appName: 'Auto Parts India',
+  webDir: 'dist',
+  ios: {
+    scrollEnabled: true,
+    backgroundColor: '#0F172A',
+    contentInset: 'always',
+    allowsLinkPreview: false
+  },
+  android: {
+    backgroundColor: '#0F172A',
+    allowMixedContent: false,
+    captureInput: true
+  },
+  plugins: {
+    GoogleAuth: {
+      scopes: ['profile', 'email'],
+      serverClientId: '751764116522-gr59kobj3c3i1hsgr5hiumauk5otr5sq.apps.googleusercontent.com',
+      forceCodeForRefreshToken: true
+    },
+    StatusBar: {
+      style: 'DARK',
+      backgroundColor: '#0F172A',
+      overlaysWebView: false
+    },
+    Keyboard: {
+      resize: KeyboardResize.Body,
+      style: KeyboardStyle.Dark,
+      resizeOnFullScreen: true
+    }
+  },
+  server: {
+    androidScheme: 'https',
+    iosScheme: 'https'
+  }
+};
+
+export default config;

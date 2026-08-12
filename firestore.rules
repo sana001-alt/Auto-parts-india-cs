@@ -1,0 +1,130 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == "wwwautoparts2@gmail.com" ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.email == "wwwautoparts2@gmail.com"
+        )
+      );
+    }
+    
+    // 0. Connection Test
+    match /test/{docId} {
+      allow read: if true;
+    }
+
+    // 1. Users Collection
+    match /users/{userId} {
+      allow read: if true;
+      allow write: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+
+      match /following/{sellerId} {
+        allow read: if true;
+        allow write: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      }
+
+      match /followers/{followerId} {
+        allow read: if true;
+        allow write: if isSignedIn() && (request.auth.uid == followerId || request.auth.uid == userId || isAdmin());
+      }
+    }
+    
+    // 2. Spare Parts Listings
+    match /listings/{listingId} {
+      allow read: if true; // Public access
+      allow write: if request.auth != null; // Only logged-in users can post
+    }
+
+    match /products/listings/items/{partId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    match /spareParts/{partId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+    
+    // 3. Chats
+    match /chats/{chatId} {
+      allow read: if isSignedIn() && (resource == null || request.auth.uid in resource.data.participants || resource.data.buyerId == request.auth.uid || resource.data.sellerId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && (request.auth.uid in resource.data.participants || resource.data.buyerId == request.auth.uid || resource.data.sellerId == request.auth.uid || isAdmin());
+      allow delete: if isSignedIn() && (request.auth.uid in resource.data.participants || resource.data.buyerId == request.auth.uid || resource.data.sellerId == request.auth.uid || isAdmin());
+    }
+    
+    // 4. Chat Messages
+    match /chats/{chatId}/messages/{messageId} {
+      allow read, write: if isSignedIn();
+    }
+    
+    // 4b. Typing Indicators
+    match /chats/{chatId}/typing/{userId} {
+      allow read, write: if isSignedIn() && (
+        isAdmin() ||
+        !exists(/databases/$(database)/documents/chats/$(chatId)) ||
+        get(/databases/$(database)/documents/chats/$(chatId)).data.buyerId == request.auth.uid || 
+        get(/databases/$(database)/documents/chats/$(chatId)).data.sellerId == request.auth.uid
+      );
+    }
+    
+    // 5. Seller Reviews
+    match /seller_reviews/{reviewId} {
+      allow read: if true;
+      allow create: if isSignedIn() && (request.resource.data.buyerId == request.auth.uid || isAdmin());
+      allow update, delete: if isSignedIn() && (resource.data.buyerId == request.auth.uid || isAdmin());
+    }
+    
+    // 6. Notifications
+    match /notifications/{notificationId} {
+      allow read: if isSignedIn() && (resource == null || resource.data.recipientId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && (request.resource.data.senderId == request.auth.uid || request.resource.data.buyerId == request.auth.uid || request.resource.data.sellerId == request.auth.uid || request.resource.data.senderId == "admin" || isAdmin());
+      allow update: if isSignedIn() && (resource.data.recipientId == request.auth.uid || resource.data.senderId == request.auth.uid || isAdmin());
+      allow delete: if isSignedIn() && (resource.data.recipientId == request.auth.uid || isAdmin());
+    }
+    
+    // 7. Favorites
+    match /favorites/{favoriteId} {
+      allow read: if isSignedIn() && (resource == null || resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && (request.resource.data.userId == request.auth.uid || isAdmin());
+      allow delete: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+    }
+
+    // 8. App Configuration (Version Info)
+    match /app_config/{configId} {
+      allow read: if true;
+      allow write: if isSignedIn() && isAdmin();
+    }
+
+    // 9. Taxonomy System Configuration
+    match /config/{docName} {
+      allow read: if true;
+      allow write: if isSignedIn() && isAdmin();
+    }
+
+    // 10. System Announcements
+    match /announcements/{announcementId} {
+      allow read: if true;
+      allow write: if isSignedIn() && isAdmin();
+    }
+
+    // 10b. User Read Announcements State
+    match /users/{userId}/read_announcements/{announcementId} {
+      allow read, write: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+    }
+
+    // 11. Banners Management
+    match /banners/{bannerId} {
+      allow read: if true;
+      allow write: if isSignedIn() && isAdmin();
+    }
+  }
+}
