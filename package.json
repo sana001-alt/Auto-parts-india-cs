@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "cap:sync": "cap sync",
+    "cap:sync": "npx cap sync",
     "cap:copy": "cap copy",
     "cap:open:android": "cap open android",
     "cap:open:ios": "cap open ios",

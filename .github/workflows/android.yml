@@ -22,7 +22,7 @@ jobs:
           node-version: '20'
 
       - name: Install Root Dependencies
-        run: npm install
+        run: npm install --legacy-peer-deps
 
       - name: Build Vite Web Application
         run: npm run build
