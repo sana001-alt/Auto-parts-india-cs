@@ -7,85 +7,125 @@ on:
       - master
   workflow_dispatch:
 
+env:
+  NODE_VERSION: '22'
+  JAVA_VERSION: '17'
+  RELEASE_KEYSTORE_ALIAS: 'autoparts'
+  RELEASE_KEYSTORE_PATH: 'android/app/auto-release.keystore'
+
 jobs:
   build-release:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
-      - name: Setup Node.js 20
+
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-      
+
       - name: Setup Java JDK 17 (Zulu)
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
-          java-version: '17'
-      
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Accept Android SDK licenses
+        run: yes | sdkmanager --licenses
+
+      - name: Install Android build tools and platforms
+        run: |
+          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+
       - name: Install dependencies
         run: npm install --legacy-peer-deps
-      
+
       - name: Build web assets
         run: npm run build
-      
+
       - name: Sync Capacitor to Android
         run: npx cap sync android
-      
+
       - name: Generate Release Keystore
         run: |
+          export RELEASE_KEYSTORE_PASSWORD="$(openssl rand -hex 16)"
+          echo "RELEASE_KEYSTORE_PASSWORD=$RELEASE_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
           keytool -genkeypair -v -storetype PKCS12 \
-            -keystore android/app/auto-release.keystore \
-            -alias autoparts \
+            -keystore "$RELEASE_KEYSTORE_PATH" \
+            -alias "$RELEASE_KEYSTORE_ALIAS" \
             -keyalg RSA \
             -keysize 2048 \
             -validity 10000 \
-            -storepass "AutoParts2026Secret" \
-            -keypass "AutoParts2026Secret" \
+            -storepass "$RELEASE_KEYSTORE_PASSWORD" \
+            -keypass "$RELEASE_KEYSTORE_PASSWORD" \
             -dname "CN=AutoParts, OU=Dev, O=AutoParts, L=India, ST=TN, C=IN"
-      
+
       - name: Build Release APK and AAB
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleRelease bundleRelease \
+          ./gradlew assembleRelease bundleRelease --no-daemon \
             -Pandroid.injected.signing.store.file=app/auto-release.keystore \
-            -Pandroid.injected.signing.store.password="AutoParts2026Secret" \
+            -Pandroid.injected.signing.store.password="$RELEASE_KEYSTORE_PASSWORD" \
             -Pandroid.injected.signing.key.alias=autoparts \
-            -Pandroid.injected.signing.key.password="AutoParts2026Secret"
-      
+            -Pandroid.injected.signing.key.password="$RELEASE_KEYSTORE_PASSWORD"
+
+      - name: Sign APK explicitly with apksigner
+        run: |
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign \
+            --ks android/app/auto-release.keystore \
+            --ks-key-alias autoparts \
+            --ks-pass pass:"$RELEASE_KEYSTORE_PASSWORD" \
+            --key-pass pass:"$RELEASE_KEYSTORE_PASSWORD" \
+            --out android/app/build/outputs/apk/release/app-release-signed.apk \
+            android/app/build/outputs/apk/release/app-release.apk
+
+      - name: Sign AAB explicitly with jarsigner
+        run: |
+          cp android/app/build/outputs/bundle/release/app-release.aab android/app/build/outputs/bundle/release/app-release-signed.aab
+          jarsigner -keystore android/app/auto-release.keystore \
+            -storepass "$RELEASE_KEYSTORE_PASSWORD" \
+            -keypass "$RELEASE_KEYSTORE_PASSWORD" \
+            -sigalg SHA256withRSA \
+            -digestalg SHA-256 \
+            -signedjar android/app/build/outputs/bundle/release/app-release-signed.aab \
+            android/app/build/outputs/bundle/release/app-release.aab \
+            autoparts
+
       - name: Verify APK and AAB files
         run: |
           echo "Checking for built artifacts..."
-          ls -la android/app/build/outputs/apk/release/ || echo "APK directory not found"
-          ls -la android/app/build/outputs/bundle/release/ || echo "AAB directory not found"
-      
+          ls -l android/app/build/outputs/apk/release/
+          ls -l android/app/build/outputs/bundle/release/
+          file android/app/build/outputs/apk/release/app-release-signed.apk
+          file android/app/build/outputs/bundle/release/app-release-signed.aab
+
       - name: Upload Signed APK
-        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: Signed-App-Release-APK
-          path: android/app/build/outputs/apk/release/app-release.apk
+          path: android/app/build/outputs/apk/release/app-release-signed.apk
           retention-days: 30
-      
+
       - name: Upload Signed AAB
-        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: Signed-App-Release-AAB
-          path: android/app/build/outputs/bundle/release/app-release.aab
+          path: android/app/build/outputs/bundle/release/app-release-signed.aab
           retention-days: 30
-      
+
       - name: Build Summary
         if: always()
         run: |
           echo "=== Build Artifacts Generated ==="
-          echo "APK Location: android/app/build/outputs/apk/release/app-release.apk"
-          echo "AAB Location: android/app/build/outputs/bundle/release/app-release.aab"
+          echo "APK Location: android/app/build/outputs/apk/release/app-release-signed.apk"
+          echo "AAB Location: android/app/build/outputs/bundle/release/app-release-signed.aab"
           echo "Keystore: android/app/auto-release.keystore"
           echo "Alias: autoparts"
           echo ""
